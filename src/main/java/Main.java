@@ -1,4 +1,5 @@
 import spark.ModelAndView;
+import spark.Request;
 import spark.template.freemarker.FreeMarkerEngine;
 
 import java.io.IOException;
@@ -10,6 +11,14 @@ import java.util.Map;
 import static spark.Spark.*;
 
 public class Main {
+
+    private static Docusign getDocusign(Request request) {
+        String fullName = request.session().attribute("fullName");
+        String memberNumber = request.session().attribute("memberNumber");
+        String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
+        Docusign docusign = new Docusign(fullName, memberNumber, returnURL);
+        return docusign;
+    }
 
     public static void main(String[] args) {
 
@@ -30,19 +39,11 @@ public class Main {
 
         get("/sign", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
-
-            // Extract key info from session
-            String fullName = request.session().attribute("fullName");
-            String memberNumber = request.session().attribute("memberNumber");
-
-            String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
-            returnURL = returnURL.replaceAll("http", "https");
-            System.out.println("Return URL = " + returnURL);
-
-            Docusign docusign = new Docusign(fullName, memberNumber, returnURL);
+            Docusign docusign = getDocusign(request);
             try {
-                String signatureURL = docusign.getSignatureURL();
-                attributes.put("signatureURL", signatureURL);
+                EnvelopeInfo einfo = docusign.getEnvelopeInfo();
+                request.session().attribute("envelopeInfo", einfo);
+                attributes.put("signatureURL", einfo.signatureUrl);
                 return new ModelAndView(attributes, "sign.ftl");
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -51,19 +52,25 @@ public class Main {
 
         get("/confirm", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
-            if ("signing_complete".equals(request.queryParams("event"))) {
-                attributes.put("message", "Thank you for signing the waiver!");
-            } else {
-                StringBuilder sbuf = new StringBuilder();
-                sbuf.append("\n");
-                for (String param : request.queryParams()) {
-                    sbuf.append(param + "=" + request.queryParams(param) + "\n");
+            try {
+                if ("signing_complete".equals(request.queryParams("event"))) {
+                    Docusign docusign = getDocusign(request);
+                    String certURL = docusign.getCertificate(request.session().attribute("envelopeInfo"));
+                    attributes.put("message", "Saved certificate URL to database: " + certURL);
+                } else {
+                    StringBuilder sbuf = new StringBuilder();
+                    sbuf.append("\n");
+                    for (String param : request.queryParams()) {
+                        sbuf.append(param + "=" + request.queryParams(param) + "\n");
+                    }
+
+                    attributes.put("message", sbuf.toString());
                 }
 
-                attributes.put("message", sbuf.toString());
+                return new ModelAndView(attributes, "confirm.ftl");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-
-            return new ModelAndView(attributes, "confirm.ftl");
 
         }, new FreeMarkerEngine());
 

@@ -7,6 +7,7 @@ import javax.xml.transform.stream.*;
 import javax.xml.xpath.*;
 
 import org.xml.sax.InputSource;
+import spark.utils.IOUtils;
 
 /**
  * Created by sroy on 1/11/16.
@@ -22,14 +23,42 @@ public class Docusign {
         this.returnURL = returnURL;
     }
 
-    public String getSignatureURL() throws IOException {
-
+    private String getAuthHeader() {
         //------------------------------------------------------------------------------------
         // These are fixed values that are part of the USHPA Docusign account:
         //------------------------------------------------------------------------------------
+
         String integratorKey = "USHP-fc0436e3-1aae-4202-8d3b-fa954c6fb3ba"; // integrator key (found on Preferences -> API page)
         String username = "saptarshir@gmail.com";                           // account email (or your API userId)
         String password = "yiM0M14RpDwT8rVwT8";                             // account password
+
+        String authenticationHeader =
+                "<DocuSignCredentials>" +
+                        "<Username>" + username + "</Username>" +
+                        "<Password>" + password + "</Password>" +
+                        "<IntegratorKey>" + integratorKey + "</IntegratorKey>" +
+                        "</DocuSignCredentials>";
+        return authenticationHeader;
+    }
+
+    public String getCertificate(EnvelopeInfo einfo) throws IOException {
+        LoginInfo loginInfo = login();
+
+        String url = loginInfo.baseURL + "/envelopes/" + einfo.envelopeId;
+        HttpURLConnection conn = initializeRequest(url, "GET", "");
+        String response = getResponseBody(conn);
+        String certificateURI = parseXMLBody(response, "certificateUri");
+
+        url = loginInfo.baseURL + certificateURI;
+        return url;
+    }
+
+    public EnvelopeInfo getEnvelopeInfo() throws IOException {
+
+        //------------------------------------------------------------------------------------
+        // Specific properties of the template we have setup via the UI
+        //------------------------------------------------------------------------------------
+
         String templateId = "0c65f68f-8453-4c30-ad47-a345207a331f";         // template ID copied from a template in your DocuSign account
         String roleName = "Member";                                          // name of the template role for above account template
 
@@ -45,53 +74,24 @@ public class Docusign {
         // STEP 1 - Make the Login API call to retrieve your baseUrl and accountId
         //============================================================================
 
-        // construct the DocuSign authentication header
-        String authenticationHeader =
-                "<DocuSignCredentials>" +
-                        "<Username>" + username + "</Username>" +
-                        "<Password>" + password + "</Password>" +
-                        "<IntegratorKey>" + integratorKey + "</IntegratorKey>" +
-                        "</DocuSignCredentials>";
-
         // additional variable declarations
-        String baseURL = "";            // we will retrieve this through the Login API call
-        String accountId = "";            // we will retrieve this through the Login API call
         HttpURLConnection conn = null;        // connection object used for each request
         String url = "";            // end-point for each api call
         String body = "";            // request body
         String response = "";            // response body
         int status;                // response status
 
-        url = "https://demo.docusign.net/restapi/v2/login_information";
-        body = "";    // no request body for the login call
-
-        // create connection object, set request method, add request headers
-        conn = InitializeRequest(url, "GET", body, authenticationHeader);
-
-        // send the request
-        System.out.println("Step 1:  Sending Login request...\n");
-        status = conn.getResponseCode();
-        if (status != 200)    // 200 = OK
-        {
-            errorParse(conn, status);
-            return null;
-        }
-
-        // obtain baseUrl and accountId values from response body
-        response = getResponseBody(conn);
-        baseURL = parseXMLBody(response, "baseUrl");
-        accountId = parseXMLBody(response, "accountId");
-        System.out.println("-- Login response --\n\n" + prettyFormat(response, 2) + "\n");
+        LoginInfo loginInfo = login();
 
         //============================================================================
         // STEP 2 - Signature Request from Template API Call
         //============================================================================
 
-        url = baseURL + "/envelopes";    // append "/envelopes" to baseUrl for signature request call
+        url = loginInfo.baseURL + "/envelopes";    // append "/envelopes" to baseUrl for signature request call
 
         // this example uses XML formatted requests, JSON format is also accepted
         body = "<envelopeDefinition xmlns=\"http://www.docusign.com/restapi\">" +
-                "<accountId>" + accountId + "</accountId>" +
+                "<accountId>" + loginInfo.accountId + "</accountId>" +
                 "<status>sent</status>" +
                 "<emailSubject>USHPA Website Waiver Signature</emailSubject>" +
                 "<templateId>" + templateId + "</templateId>" +
@@ -118,7 +118,7 @@ public class Docusign {
         System.out.println("-----------------");
 
         // re-use connection object for second request...
-        conn = InitializeRequest(url, "POST", body, authenticationHeader);
+        conn = initializeRequest(url, "POST", body);
 
         System.out.println("Step 2:  Creating envelope from template...\n");
         status = conn.getResponseCode(); // triggers the request
@@ -131,13 +131,14 @@ public class Docusign {
         // obtain envelope uri from response body
         response = getResponseBody(conn);
         String uri = parseXMLBody(response, "uri");
+        String envelopeId = parseXMLBody(response, "envelopeId");
         System.out.println("-- Envelope Creation response --\n\n" + prettyFormat(response, 2));
 
         //============================================================================
         // STEP 3 - Get the Embedded Signing View
         //============================================================================
 
-        url = baseURL + uri + "/views/recipient";    // append envelope uri + "views/recipient" to url
+        url = loginInfo.baseURL + uri + "/views/recipient";    // append envelope uri + "views/recipient" to url
 
         // this example uses XML formatted requests, JSON format is also accepted
         body = "<recipientViewRequest xmlns=\"http://www.docusign.com/restapi\">" +
@@ -149,7 +150,7 @@ public class Docusign {
                 "</recipientViewRequest>";
 
         System.out.print("Step 3:  Generating URL token for embedded signing... ");
-        conn = InitializeRequest(url, "POST", body, authenticationHeader);
+        conn = initializeRequest(url, "POST", body);
         status = conn.getResponseCode(); // triggers the request
         if (status != 201)    // 201 = Created
         {
@@ -162,7 +163,41 @@ public class Docusign {
         String urlToken = parseXMLBody(response, "url");
         System.out.println("\nEmbedded signing token created:\n\t" + urlToken);
 
-        return urlToken;
+        EnvelopeInfo einfo = new EnvelopeInfo();
+        einfo.signatureUrl = urlToken;
+        einfo.envelopeId = envelopeId;
+
+        return einfo;
+    }
+
+    private LoginInfo login() throws IOException {
+        String url;
+        String body;
+        HttpURLConnection conn;
+        int status;
+        String response;
+        url = "https://demo.docusign.net/restapi/v2/login_information";
+        body = "";    // no request body for the login call
+
+        // create connection object, set request method, add request headers
+        conn = initializeRequest(url, "GET", body);
+
+        // send the request
+        System.out.println("Step 1:  Sending Login request...\n");
+        status = conn.getResponseCode();
+        if (status != 200)    // 200 = OK
+        {
+            errorParse(conn, status);
+            return null;
+        }
+
+        // obtain baseUrl and accountId values from response body
+        response = getResponseBody(conn);
+        LoginInfo loginInfo = new LoginInfo();
+        loginInfo.baseURL = parseXMLBody(response, "baseUrl");
+        loginInfo.accountId = parseXMLBody(response, "accountId");
+        System.out.println("-- Login response --\n\n" + prettyFormat(response, 2) + "\n");
+        return loginInfo;
     }
 
     //***********************************************************************************************
@@ -170,7 +205,9 @@ public class Docusign {
     // --- HELPER FUNCTIONS ---
     //***********************************************************************************************
     //***********************************************************************************************
-    public static HttpURLConnection InitializeRequest(String url, String method, String body, String httpAuthHeader) {
+    private HttpURLConnection initializeRequest(String url, String method, String body) {
+
+        String httpAuthHeader = getAuthHeader();
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) new URL(url).openConnection();
@@ -196,7 +233,7 @@ public class Docusign {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    public String parseXMLBody(String body, String searchToken) {
+    private String parseXMLBody(String body, String searchToken) {
         String xPathExpression;
         try {
             // we use xPath to parse the XML formatted response body
@@ -209,7 +246,7 @@ public class Docusign {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    public String getResponseBody(HttpURLConnection conn) {
+    private String getResponseBody(HttpURLConnection conn) {
         BufferedReader br = null;
         StringBuilder body = null;
         String line = "";
@@ -226,7 +263,7 @@ public class Docusign {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    public void errorParse(HttpURLConnection conn, int status) {
+    private void errorParse(HttpURLConnection conn, int status) {
         BufferedReader br;
         String line;
         StringBuilder responseError;
@@ -246,7 +283,7 @@ public class Docusign {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    public String prettyFormat(String input, int indent) {
+    private String prettyFormat(String input, int indent) {
         try {
             Source xmlInput = new StreamSource(new StringReader(input));
             StringWriter stringWriter = new StringWriter();
