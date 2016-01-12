@@ -7,8 +7,8 @@
 <body>
 
 <div class="container">
-  <div class="alert alert-info text-center" role="alert">
-      ${message}
+  <div class="jumbotron text-center">
+      <h2>${message}</h2>
   </div>
 </div>
 

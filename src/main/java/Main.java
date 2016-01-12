@@ -51,14 +51,20 @@ public class Main {
 
         get("/confirm", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
-            StringBuilder sbuf = new StringBuilder();
-            sbuf.append("\n");
-            for (String param : request.queryParams()) {
-                sbuf.append(param + "=" + request.queryParams(param) + "\n");
+            if ("signing_complete".equals(request.queryParams("event"))) {
+                attributes.put("message", "Thank you for signing the waiver!");
+            } else {
+                StringBuilder sbuf = new StringBuilder();
+                sbuf.append("\n");
+                for (String param : request.queryParams()) {
+                    sbuf.append(param + "=" + request.queryParams(param) + "\n");
+                }
+
+                attributes.put("message", sbuf.toString());
             }
 
-            attributes.put("message", sbuf.toString());
             return new ModelAndView(attributes, "confirm.ftl");
+
         }, new FreeMarkerEngine());
 
         exception(Exception.class, (e, request, response) -> {
