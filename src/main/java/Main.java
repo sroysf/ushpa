@@ -60,7 +60,8 @@ public class Main {
                     Docusign docusign = getDocusign(request);
                     String certURL = docusign.getCertificate(request.session().attribute("envelopeInfo"));
                     System.out.println("Certificate URL = " + certURL);
-                    attributes.put("message", "Saved certificate URL to database: " + certURL);
+                    attributes.put("message", "Saved certificate URL to database:");
+                    attributes.put("certURL", certURL);
                 } else {
                     StringBuilder sbuf = new StringBuilder();
                     sbuf.append("\n");

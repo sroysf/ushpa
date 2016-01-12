@@ -9,6 +9,7 @@
 <div class="container">
   <div class="jumbotron text-center">
       <h2>${message}</h2>
+      <h3>${certURL}</h3>
   </div>
 </div>
 
