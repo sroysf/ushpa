@@ -19,6 +19,9 @@ public class Main {
         get("/ushpa", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
 
+            String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
+            System.out.println("Return URL = " + returnURL);
+            
             request.session().attribute("fullName", "Julie Thermalhunter");
             request.session().attribute("memberNumber", "80468");
 
