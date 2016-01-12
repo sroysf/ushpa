@@ -16,6 +16,7 @@ public class Main {
         String fullName = request.session().attribute("fullName");
         String memberNumber = request.session().attribute("memberNumber");
         String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
+        returnURL = returnURL.replaceAll("http:", "https:");
         System.out.println("Return URL = " + returnURL);
         Docusign docusign = new Docusign(fullName, memberNumber, returnURL);
         return docusign;
