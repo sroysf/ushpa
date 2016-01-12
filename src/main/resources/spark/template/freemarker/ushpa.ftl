@@ -16,7 +16,7 @@
     <h1>Docusign based USHPA Waivers</h1>
     <p>Welcome, ${fullName} (USHPA #${memberNumber})</p>
     <a type="button" class="btn btn-lg btn-default" href="/sign"><span class="glyphicon glyphicon-flash"></span> Sign Waiver</a>
-    <a type="button" class="btn btn-lg btn-primary" href="https://github.com/heroku/java-getting-started"><span class="glyphicon glyphicon-download"></span> Source on GitHub</a>
+    <a type="button" class="btn btn-lg btn-primary" href="https://github.com/sroysf/ushpa"><span class="glyphicon glyphicon-download"></span> Source on GitHub</a>
   </div>
 </div>
 <div class="container">
