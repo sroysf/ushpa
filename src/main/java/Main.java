@@ -20,8 +20,9 @@ public class Main {
             Map<String, Object> attributes = new HashMap<>();
 
             String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
+            returnURL = returnURL.replaceAll("http", "https");
             System.out.println("Return URL = " + returnURL);
-            
+
             request.session().attribute("fullName", "Julie Thermalhunter");
             request.session().attribute("memberNumber", "80468");
 
