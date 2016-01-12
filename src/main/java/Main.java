@@ -1,60 +1,65 @@
-import java.sql.*;
+import spark.ModelAndView;
+import spark.template.freemarker.FreeMarkerEngine;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
-import java.util.ArrayList;
 import java.util.Map;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-
 import static spark.Spark.*;
-import spark.template.freemarker.FreeMarkerEngine;
-import spark.ModelAndView;
-import static spark.Spark.get;
-
-import com.heroku.sdk.jdbc.DatabaseUrl;
 
 public class Main {
 
-  public static void main(String[] args) {
+    public static void main(String[] args) {
 
-    port(Integer.valueOf(System.getenv("PORT")));
-    staticFileLocation("/public");
+        port(Integer.valueOf(System.getenv("PORT")));
+        staticFileLocation("/public");
 
-    get("/hello", (req, res) -> "Hello World");
-
-    get("/", (request, response) -> {
+        get("/ushpa", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
-            attributes.put("message", "Hello World!");
 
-            return new ModelAndView(attributes, "index.ftl");
+            request.session().attribute("fullName", "Julie Thermalhunter");
+            request.session().attribute("memberNumber", "80468");
+
+            attributes.put("fullName", request.session().attribute("fullName"));
+            attributes.put("memberNumber", request.session().attribute("memberNumber"));
+
+            return new ModelAndView(attributes, "ushpa.ftl");
         }, new FreeMarkerEngine());
 
-    get("/db", (req, res) -> {
-      Connection connection = null;
-      Map<String, Object> attributes = new HashMap<>();
-      try {
-        connection = DatabaseUrl.extract().getConnection();
+        get("/sign", (request, response) -> {
+            Map<String, Object> attributes = new HashMap<>();
 
-        Statement stmt = connection.createStatement();
-        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ticks (tick timestamp)");
-        stmt.executeUpdate("INSERT INTO ticks VALUES (now())");
-        ResultSet rs = stmt.executeQuery("SELECT tick FROM ticks");
+            // Extract key info from session
+            String fullName = request.session().attribute("fullName");
+            String memberNumber = request.session().attribute("memberNumber");
 
-        ArrayList<String> output = new ArrayList<String>();
-        while (rs.next()) {
-          output.add( "Read from DB: " + rs.getTimestamp("tick"));
-        }
+            String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
+            System.out.println("Return URL = " + returnURL);
+            Docusign docusign = new Docusign(fullName, memberNumber, returnURL);
+            try {
+                String signatureURL = docusign.getSignatureURL();
+                attributes.put("signatureURL", signatureURL);
+                return new ModelAndView(attributes, "sign.ftl");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }, new FreeMarkerEngine());
 
-        attributes.put("results", output);
-        return new ModelAndView(attributes, "db.ftl");
-      } catch (Exception e) {
-        attributes.put("message", "There was an error: " + e);
-        return new ModelAndView(attributes, "error.ftl");
-      } finally {
-        if (connection != null) try{connection.close();} catch(SQLException e){}
-      }
-    }, new FreeMarkerEngine());
+        get("/confirm", (request, response) -> {
+            Map<String, Object> attributes = new HashMap<>();
+            attributes.put("message", request.url());
+            return new ModelAndView(attributes, "confirm.ftl");
+        }, new FreeMarkerEngine());
 
-  }
+        exception(Exception.class, (e, request, response) -> {
+            response.status(500);
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            response.body("<html></head><body><pre>" + sw.toString() + "</pre></body>");
+        });
+    }
 
 }
