@@ -38,7 +38,7 @@ public class Main {
             String returnURL = request.url().substring(0, request.url().lastIndexOf("/")) + "/confirm";
             returnURL = returnURL.replaceAll("http", "https");
             System.out.println("Return URL = " + returnURL);
-            
+
             Docusign docusign = new Docusign(fullName, memberNumber, returnURL);
             try {
                 String signatureURL = docusign.getSignatureURL();
@@ -51,7 +51,13 @@ public class Main {
 
         get("/confirm", (request, response) -> {
             Map<String, Object> attributes = new HashMap<>();
-            attributes.put("message", request.url());
+            StringBuilder sbuf = new StringBuilder();
+            sbuf.append("\n");
+            for (String param : request.queryParams()) {
+                sbuf.append(param + "=" + request.queryParams(param) + "\n");
+            }
+
+            attributes.put("message", sbuf.toString());
             return new ModelAndView(attributes, "confirm.ftl");
         }, new FreeMarkerEngine());
 
